@@ -99,7 +99,7 @@ def fetch_rhythia_data(user_id: str) -> Optional[Dict[str, Any]]:
 
     # Try multiple table names – you'll need to discover the correct one.
     # Based on Rhythia's data model, possibilities: "users", "profiles", "player_stats", "scores", etc.
-    tables_to_try = ["users", "profiles", "player_stats", "scores"]
+    tables_to_try = ["user", "getProfile", "player_stats", "getUserScores"]
 
     for table in tables_to_try:
         # Query: filter by user_id (assuming column name is "user_id")
