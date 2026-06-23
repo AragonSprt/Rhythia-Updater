@@ -1,0 +1,29 @@
+name: Update Rhythia Profile Widget
+
+on:
+  schedule:
+    # Runs every 5 minutes (GitHub Actions minimum interval)
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  update-widget:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Update Discord widget
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          USER_ID: ${{ vars.USER_ID || '604624172613894144' }}
+          APPLICATION_ID: ${{ vars.APPLICATION_ID || '1516952439474098176' }}
+        run: python update_rhythia_widget.py
