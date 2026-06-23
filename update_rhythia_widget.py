@@ -79,58 +79,61 @@ def build_dynamic_data(stats: Dict[str, Any]) -> List[Dict[str, Any]]:
 # ------------------------------------------------------------
 def fetch_rhythia_data(user_id: str) -> Optional[Dict[str, Any]]:
     """
-    Fetch user data from the Rhythia backend.
-    Tries production.rhythia.com first, then falls back to Supabase.
+    Fetch user data from Rhythia.
+    Tries production.rhythia.com first (likely deprecated/incorrect),
+    then falls back to Supabase.
     """
-    # Option 1: Try the production.rhythia.com API
-    api_url = f"https://production.rhythia.com/api/users/{user_id}/stats"
+    # Option 1: production.rhythia.com (you got 404, so we'll skip or keep as fallback)
+    # ...
+
+    # Option 2: Supabase direct access
+    supabase_url = "https://pfkajngbllcbdzoylrvp.supabase.co/rest/v1"
+    anon_key = "sb_publishable_cZjrvcGQJOBj94Ait1lv7A_eMNDTunK"  # or read from env
+
+    # Headers required by Supabase
     headers = {
-        "Authorization": f"Bearer {BOT_TOKEN}",  # if the API expects a Bearer token
+        "apikey": anon_key,
+        "Authorization": f"Bearer {anon_key}",
         "Content-Type": "application/json"
     }
-    try:
-        resp = requests.get(api_url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            # Map fields according to the actual response structure
-            return {
-                "level": data.get("level"),
-                "score": data.get("score"),
-                "avatar_url": data.get("avatar_url"),
-                "status": data.get("status")
-            }
-        else:
-            logging.warning(f"Primary API returned {resp.status_code}, trying Supabase...")
-    except requests.RequestException as e:
-        logging.warning(f"Primary API request failed: {e}, trying Supabase...")
 
-    # Option 2: Direct Supabase access (requires an anon/public key)
-    supabase_url = "https://pfkajngbllcbdzoylrvp.supabase.co/rest/v1"
-    # Assume there is a table named "users" or "profiles" – adjust accordingly
-    table = "profiles"  # change this to the actual table name
-    endpoint = f"{supabase_url}/{table}?user_id=eq.{user_id}&select=*"
-    headers = {
-        "apikey": os.environ.get("SUPABASE_ANON_KEY", ""),
-        "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY', '')}"
-    }
-    try:
-        resp = requests.get(endpoint, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            rows = resp.json()
-            if rows:
-                row = rows[0]
-                return {
-                    "level": row.get("level"),
-                    "score": row.get("score"),
-                    "avatar_url": row.get("avatar_url"),
-                    "status": row.get("status")
-                }
-        else:
-            logging.error(f"Supabase API returned {resp.status_code}: {resp.text}")
-    except requests.RequestException as e:
-        logging.error(f"Supabase request failed: {e}")
+    # Try multiple table names – you'll need to discover the correct one.
+    # Based on Rhythia's data model, possibilities: "users", "profiles", "player_stats", "scores", etc.
+    tables_to_try = ["users", "profiles", "player_stats", "scores"]
 
-    # If all attempts fail, return None
+    for table in tables_to_try:
+        # Query: filter by user_id (assuming column name is "user_id")
+        # Adjust column name if it's "id", "discord_id", etc.
+        endpoint = f"{supabase_url}/{table}?user_id=eq.{user_id}&select=*"
+        try:
+            resp = requests.get(endpoint, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                rows = resp.json()
+                if rows:
+                    row = rows[0]  # assume first match
+                    logging.info(f"Data found in table '{table}'")
+                    return {
+                        "level": row.get("level"),
+                        "score": row.get("score"),
+                        "avatar_url": row.get("avatar_url"),
+                        "status": row.get("status")
+                    }
+            elif resp.status_code != 404:  # log unexpected errors
+                logging.warning(f"Table '{table}' returned {resp.status_code}: {resp.text[:100]}")
+        except requests.RequestException as e:
+            logging.warning(f"Request to table '{table}' failed: {e}")
+
+    # If none worked, try to get the list of available tables (if allowed)
+    try:
+        resp = requests.get(supabase_url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            logging.info(f"Available tables (may be empty): {resp.json()}")
+        else:
+            logging.warning(f"Could not list tables: {resp.status_code}")
+    except Exception as e:
+        logging.warning(f"Failed to list tables: {e}")
+
+    logging.error("No data found in any table.")
     return None
 
 # ------------------------------------------------------------
