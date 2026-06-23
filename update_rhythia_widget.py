@@ -79,33 +79,59 @@ def build_dynamic_data(stats: Dict[str, Any]) -> List[Dict[str, Any]]:
 # ------------------------------------------------------------
 def fetch_rhythia_data(user_id: str) -> Optional[Dict[str, Any]]:
     """
-    Retrieve the data you want to display from Rhythia.
-    If an official API exists, call it here.
-    If not, you may need to reverse‑engineer the API from the Rhythia web app
-    or the bot's internal endpoints.
-
-    This placeholder returns some dummy data so you can test the flow.
-    Replace it with a real API call or data source.
+    Fetch user data from the Rhythia backend.
+    Tries production.rhythia.com first, then falls back to Supabase.
     """
-    # -----------------------------------------------------------------
-    # Example using a hypothetical Rhythia API:
-    #   api_url = f"https://api.rhythia.bot/v1/users/{user_id}"
-    #   headers = {"Authorization": f"Bearer {BOT_TOKEN}"}  # if needed
-    #   resp = requests.get(api_url, headers=headers)
-    #   if resp.status_code == 200:
-    #       return resp.json()
-    #   else:
-    #       logging.error(f"API returned {resp.status_code}: {resp.text}")
-    #       return None
-    # -----------------------------------------------------------------
-
-    # Placeholder dummy data - remove this when you integrate the real source.
-    return {
-        "level": 42,
-        "score": 123456,
-        "avatar_url": "https://cdn.discordapp.com/avatars/604624172613894144/avatar.png",
-        "status": "vibing to lofi beats"
+    # Option 1: Try the production.rhythia.com API
+    api_url = f"https://production.rhythia.com/api/users/{user_id}/stats"
+    headers = {
+        "Authorization": f"Bearer {BOT_TOKEN}",  # if the API expects a Bearer token
+        "Content-Type": "application/json"
     }
+    try:
+        resp = requests.get(api_url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            # Map fields according to the actual response structure
+            return {
+                "level": data.get("level"),
+                "score": data.get("score"),
+                "avatar_url": data.get("avatar_url"),
+                "status": data.get("status")
+            }
+        else:
+            logging.warning(f"Primary API returned {resp.status_code}, trying Supabase...")
+    except requests.RequestException as e:
+        logging.warning(f"Primary API request failed: {e}, trying Supabase...")
+
+    # Option 2: Direct Supabase access (requires an anon/public key)
+    supabase_url = "https://pfkajngbllcbdzoylrvp.supabase.co/rest/v1"
+    # Assume there is a table named "users" or "profiles" – adjust accordingly
+    table = "profiles"  # change this to the actual table name
+    endpoint = f"{supabase_url}/{table}?user_id=eq.{user_id}&select=*"
+    headers = {
+        "apikey": os.environ.get("SUPABASE_ANON_KEY", ""),
+        "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY', '')}"
+    }
+    try:
+        resp = requests.get(endpoint, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            rows = resp.json()
+            if rows:
+                row = rows[0]
+                return {
+                    "level": row.get("level"),
+                    "score": row.get("score"),
+                    "avatar_url": row.get("avatar_url"),
+                    "status": row.get("status")
+                }
+        else:
+            logging.error(f"Supabase API returned {resp.status_code}: {resp.text}")
+    except requests.RequestException as e:
+        logging.error(f"Supabase request failed: {e}")
+
+    # If all attempts fail, return None
+    return None
 
 # ------------------------------------------------------------
 # Main update logic
